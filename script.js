@@ -662,9 +662,21 @@ $("projectNotes")?.addEventListener("input", () => {
   window._bendigoNotesTimer = setTimeout(saveWorkspace, 700);
 });
 
+// Auto-save every Code Lab draft locally, including Python, so a refresh
+// does not discard recent work. Python execution remains disabled until a
+// secure server-side Python runner is implemented.
 [htmlCode, cssCode, jsCode, $("pythonCode")].forEach(editor => editor?.addEventListener("input", () => {
   clearTimeout(editor._bendigoTimer);
-  editor._bendigoTimer = setTimeout(runCode, 500);
+  editor._bendigoTimer = setTimeout(() => {
+    saveWorkspace();
+    const codeStatus = $("codeStatus");
+    if (codeStatus) {
+      codeStatus.textContent = editor.id === "pythonCode"
+        ? "Python draft saved"
+        : "Draft saved locally";
+    }
+    if (editor !== $("pythonCode")) runCode();
+  }, 500);
 }));
 
 let recognition = null;
