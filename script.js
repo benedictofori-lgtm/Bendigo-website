@@ -810,22 +810,77 @@ $("githubPrButton")?.addEventListener("click", async () => {
 });
 
 async function checkSystemHealth() {
+  const ai = $("statAI");
+  const aiSub = $("statAISub");
+  const github = $("statGithub");
+  const githubSub = $("statGithubSub");
+
   try {
-    const response = await fetch(apiUrl("/api/health"));
-    const data = await response.json();
-    const ai = $("statAI");
-    const aiSub = $("statAISub");
-    if (ai) ai.textContent = data.aiConfigured ? "READY" : "LOCAL";
-    if (aiSub) aiSub.textContent = data.aiConfigured ? "AI service connected" : "Built-in fallback";
-    if (data.github?.connected) {
-      const g = $("statGithub");
-      const gs = $("statGithubSub");
-      if (g) g.textContent = data.github.writeEnabled ? "CONNECTED" : "READ-ONLY";
-      if (gs) gs.textContent = data.github.writeEnabled ? "Write access ready" : "Public repository sync";
+    // Check the API, model configuration, and database independently so a
+    // healthy web server is not mistaken for a working language model.
+    const [healthResponse, aiResponse, dbResponse] = await Promise.all([
+      fetch(apiUrl("/api/health"), {cache: "no-store"}),
+      fetch(apiUrl("/api/ai/status"), {cache: "no-store"}),
+      fetch(apiUrl("/api/db/status"), {cache: "no-store"})
+    ]);
+
+    if (!healthResponse.ok) throw new Error("Backend health check failed.");
+    const health = await healthResponse.json();
+    const aiStatus = aiResponse.ok ? await aiResponse.json() : null;
+    const dbStatus = dbResponse.ok ? await dbResponse.json() : null;
+
+    if (ai) {
+      if (!aiStatus || !aiStatus.configured) {
+        ai.textContent = "FALLBACK";
+      } else if (aiStatus.connectionStatus === "ready") {
+        ai.textContent = "READY";
+      } else {
+        ai.textContent = "CHECK";
+      }
     }
-  } catch {
-    const ai = $("statAI");
+    if (aiSub) {
+      if (!aiStatus || !aiStatus.configured) {
+        aiSub.textContent = "Built-in replies only; model not configured";
+      } else if (aiStatus.connectionStatus === "ready") {
+        aiSub.textContent = "Model endpoint reachable: " + (aiStatus.model || "configured model");
+      } else if (aiStatus.connectionStatus === "configured_not_verified") {
+        aiSub.textContent = "Model configured; generation not yet verified";
+      } else {
+        aiSub.textContent = "Model endpoint unavailable or model missing";
+      }
+    }
+
+    if (github) {
+      github.textContent = health.github?.connected
+        ? (health.github.writeEnabled ? "CONNECTED" : "READ-ONLY")
+        : "OFFLINE";
+    }
+    if (githubSub) {
+      githubSub.textContent = health.github?.connected
+        ? (health.github.writeEnabled ? "Repository read/write enabled" : "Public repository read access only")
+        : "Repository could not be reached";
+    }
+
+    // Keep the database result available for debugging without claiming
+    // persistent storage when chat history is only held in process memory.
+    const dbLabel = $("statDatabase");
+    const dbSub = $("statDatabaseSub");
+    if (dbLabel) {
+      dbLabel.textContent = !dbStatus || !dbStatus.configured
+        ? "MEMORY"
+        : (dbStatus.persistent ? "CONNECTED" : "ERROR");
+    }
+    if (dbSub) {
+      dbSub.textContent = !dbStatus || !dbStatus.configured
+        ? "Chat history may reset when server restarts"
+        : (dbStatus.persistent ? "Persistent PostgreSQL storage" : "Database configured but unavailable");
+    }
+  } catch (error) {
     if (ai) ai.textContent = "OFFLINE";
+    if (aiSub) aiSub.textContent = "Unable to check backend status";
+    if (github) github.textContent = "UNKNOWN";
+    if (githubSub) githubSub.textContent = "Status check failed";
+    console.error("Bendigo AI system health check:", error);
   }
 }
 
