@@ -763,6 +763,13 @@ class SafePythonRunner:
             left, right = self.expr(node.left), self.expr(node.right)
             if isinstance(node.op, ast.Pow) and (abs(float(right)) > 8 or (isinstance(left, (int, float)) and abs(float(left)) > 1e6)):
                 raise ValueError("Exponent is too large for this learning runner.")
+            if isinstance(node.op, ast.Mult):
+                if isinstance(left, (str, list, tuple)) and isinstance(right, int) and len(left) * max(0, right) > 10000:
+                    raise ValueError("Text and list results are limited to 10,000 items.")
+                if isinstance(right, (str, list, tuple)) and isinstance(left, int) and len(right) * max(0, left) > 10000:
+                    raise ValueError("Text and list results are limited to 10,000 items.")
+            if isinstance(node.op, ast.Add) and isinstance(left, (str, list, tuple)) and isinstance(right, type(left)) and len(left) + len(right) > 10000:
+                raise ValueError("Text and list results are limited to 10,000 items.")
             value = _SAFE_BINOPS[type(node.op)](left, right)
             if isinstance(value, (int, float)) and abs(value) > 1e100:
                 raise ValueError("Result is too large.")
