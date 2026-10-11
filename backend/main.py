@@ -1049,8 +1049,8 @@ async def github_files():
 async def search(
     q: str = Query(min_length=1, max_length=500),
     limit: int = Query(default=10, ge=1, le=15),
-    region: str = Query(default="wt-wt", pattern=r"^[a-zA-Z-]{2,12}$"),
-    safe_search: str = Query(default="moderate", pattern=r"^(strict|moderate|off)$"),
+    region: str = Query(default="gh-en", pattern=r"^[a-zA-Z-]{2,12}$"),
+    safe_search: str = Query(default="strict", pattern=r"^(strict|moderate|off)$"),
 ):
     """Search the public web through DuckDuckGo HTML results (no API key required)."""
     query = re.sub(r"\s+", " ", q).strip()
