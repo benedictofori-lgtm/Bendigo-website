@@ -50,8 +50,8 @@ async function performWebSearch(query, options = {}) {
   const params = new URLSearchParams({
     q: query,
     limit: String(options.limit || 10),
-    region: options.region || "wt-wt",
-    safe_search: options.safeSearch || "moderate"
+    region: options.region || "gh-en",
+    safe_search: options.safeSearch || "strict"
   });
   let response;
   try {
@@ -78,12 +78,12 @@ async function performWebSearch(query, options = {}) {
   };
 }
 
-function addSearchResults(query, results) {
+function addSearchResults(query, results, metadata = {}) {
   if (!chat) return;
   const wrap = document.createElement("div");
   wrap.className = "message ai search-results";
   const heading = document.createElement("strong");
-  heading.textContent = "Search results for: " + query;
+  heading.textContent = "Search results for: " + query + " · " + (metadata.resultCount || results.length) + " results · " + (metadata.provider || "Web search");
   wrap.appendChild(heading);
 
   results.forEach((result, index) => {
@@ -202,7 +202,7 @@ async function sendMessage(message = input?.value.trim()) {
     if (searchMatch) {
       const query = searchMatch[1].trim();
       const searchData = await performWebSearch(query);
-      if (searchData.results.length) addSearchResults(query, searchData.results);
+      if (searchData.results.length) addSearchResults(query, searchData.results, searchData);
       else addMessage(searchData.text, "ai");
       return;
     }
