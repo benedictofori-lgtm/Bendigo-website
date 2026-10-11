@@ -5,6 +5,10 @@ const $ = (id) => document.getElementById(id);
 const BACKEND_URL = "https://bendigo-ai-backend.onrender.com";
 const apiUrl = (path) => BACKEND_URL + path;
 
+// Optional in-browser inference. It uses the visitor's compatible device, not a provider API key.
+let localAIEngine = null;
+let localAIInitializing = false;
+
 const chat = $("chat");
 const input = $("userInput");
 const sendButton = $("sendButton");
@@ -127,6 +131,27 @@ function addSearchResults(query, results, metadata = {}) {
 
 async function requestChatReply(message, history) {
   const payload = {message, sessionId, history};
+
+  // Prefer the local model only after the user explicitly enables and finishes loading it.
+  if (localAIEngine) {
+    const localMessages = [{role: "system", content: "You are Bendigo AI, a helpful general-purpose assistant. Answer directly and accurately. Explain reasoning clearly, give practical examples, and provide runnable code when useful. If uncertain, say so."}];
+    for (const item of (history || []).slice(-12)) {
+      if (!item || !["user", "assistant"].includes(item.role) || typeof item.content !== "string") continue;
+      localMessages.push({role: item.role, content: item.content.slice(0, 12000)});
+    }
+    if (!localMessages.some(item => item.role === "user" && item.content.trim() === message.trim())) {
+      localMessages.push({role: "user", content: message});
+    }
+    const localReply = await localAIEngine.chat.completions.create({
+      messages: localMessages,
+      temperature: 0.7,
+      max_tokens: 900
+    });
+    const localText = localReply.choices?.[0]?.message?.content?.trim();
+    if (!localText) throw new Error("The on-device model returned an empty reply. Try again or switch off local AI.");
+    addMessage(localText, "ai");
+    return;
+  }
 
   // Prefer streaming for a ChatGPT-style response.
   try {
@@ -257,6 +282,45 @@ async function verifyBendigoBackend() {
     console.error("Bendigo backend health check:", error);
   }
 }
+
+async function enableLocalAI() {
+  const button = $("enableLocalAIButton");
+  const status = $("localAIStatus");
+  if (!button || !status || localAIInitializing || localAIEngine) return;
+  if (!("gpu" in navigator)) {
+    status.textContent = "This browser does not expose WebGPU. Try a recent Chrome or Edge browser on a compatible device.";
+    return;
+  }
+  localAIInitializing = true;
+  button.disabled = true;
+  button.textContent = "Loading local AI…";
+  status.textContent = "Preparing the model. The first download may be around 1–2 GB and can take time.";
+  try {
+    // Import only after the user opts in so normal page loading stays lightweight.
+    const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+    localAIEngine = await webllm.CreateMLCEngine("Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
+      initProgressCallback: (progress) => {
+        const percent = Number.isFinite(progress?.progress) ? Math.round(progress.progress * 100) : null;
+        status.textContent = percent === null
+          ? (progress?.text || "Downloading and preparing the local model…")
+          : "Preparing local model: " + percent + "% — " + (progress?.text || "Please keep this tab open.");
+      }
+    });
+    button.textContent = "On-device AI enabled";
+    status.textContent = "Local model ready. Chat messages will use this browser model until the page is reloaded.";
+  } catch (error) {
+    localAIEngine = null;
+    button.disabled = false;
+    button.textContent = "Try enabling on-device AI again";
+    status.textContent = "Could not start the local model. Check WebGPU support, available memory, and your connection, then try again.";
+    console.error("Bendigo on-device AI initialization failed:", error);
+  } finally {
+    localAIInitializing = false;
+    if (localAIEngine) button.disabled = false;
+  }
+}
+
+$("enableLocalAIButton")?.addEventListener("click", enableLocalAI);
 
 verifyBendigoBackend();
 
