@@ -777,8 +777,21 @@ class SafePythonRunner:
         if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_UNARYOPS:
             return _SAFE_UNARYOPS[type(node.op)](self.expr(node.operand))
         if isinstance(node, ast.BoolOp):
-            values = [self.expr(item) for item in node.values]
-            return all(values) if isinstance(node.op, ast.And) else any(values)
+            # Match Python's short-circuit behaviour: do not evaluate later
+            # expressions when the result is already determined.
+            if isinstance(node.op, ast.And):
+                for item in node.values:
+                    value = self.expr(item)
+                    if not value:
+                        return value
+                return value
+            if isinstance(node.op, ast.Or):
+                for item in node.values:
+                    value = self.expr(item)
+                    if value:
+                        return value
+                return value
+            raise ValueError("This boolean operator is not supported.")
         if isinstance(node, ast.Compare):
             left = self.expr(node.left)
             for op_node, comparator in zip(node.ops, node.comparators):
@@ -840,7 +853,20 @@ class SafePythonRunner:
             current = self.variables.get(node.target.id)
             if current is None and node.target.id not in self.variables:
                 raise ValueError("Name '" + node.target.id + "' is not defined.")
-            self.variables[node.target.id] = _SAFE_BINOPS[type(node.op)](current, self.expr(node.value))
+            right = self.expr(node.value)
+            if isinstance(node.op, ast.Pow) and (abs(float(right)) > 8 or (isinstance(current, (int, float)) and abs(float(current)) > 1e6)):
+                raise ValueError("Exponent is too large for this learning runner.")
+            if isinstance(node.op, ast.Mult):
+                if isinstance(current, (str, list, tuple)) and isinstance(right, int) and len(current) * max(0, right) > 10000:
+                    raise ValueError("Text and list results are limited to 10,000 items.")
+                if isinstance(right, (str, list, tuple)) and isinstance(current, int) and len(right) * max(0, current) > 10000:
+                    raise ValueError("Text and list results are limited to 10,000 items.")
+            if isinstance(node.op, ast.Add) and isinstance(current, (str, list, tuple)) and isinstance(right, type(current)) and len(current) + len(right) > 10000:
+                raise ValueError("Text and list results are limited to 10,000 items.")
+            result = _SAFE_BINOPS[type(node.op)](current, right)
+            if isinstance(result, (int, float)) and abs(result) > 1e100:
+                raise ValueError("Result is too large.")
+            self.variables[node.target.id] = result
         elif isinstance(node, ast.Expr):
             # Only print calls are allowed as standalone statements.
             if not (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "print"):
@@ -1094,7 +1120,7 @@ async def search(
             parsed_url = urlparse(result_url)
             if parsed_url.netloc.lower().endswith("duckduckgo.com") and parsed_url.path.startswith("/l/"):
                 destination = parse_qs(parsed_url.query).get("uddg", [""])[0]
-                result_url = unquote(destination) if destination else ""
+                result_url = destination if destination else ""
                 parsed_url = urlparse(result_url)
             if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc or not title:
                 continue
