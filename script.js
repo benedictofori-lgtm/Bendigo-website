@@ -224,11 +224,10 @@ function getWebSearchQuery(message) {
   const explicit = text.match(/^\s*(?:search(?: the web)?(?: for)?|look up|find (?:web )?results for)\s+(.+)/i);
   if (explicit) return explicit[1].trim();
 
-  // Without a language model, factual/current questions should search the web
-  // rather than return a misleading canned chat answer.
-  const factualQuestion = /^(?:what is|what are|who is|who are|who was|where is|where are|when is|when did|why is|why are|why does|how does|how do|how to|what happened to|tell me about|latest|current|recent|news about|price of|meaning of)\b/i;
-  const currentInfo = /\b(latest news|today's news|current price|recent updates|breaking news|weather today|release date|official website)\b/i;
-  if (factualQuestion.test(text) || currentInfo.test(text)) return text;
+  // Keep ordinary knowledge questions in chat. Use web search for explicitly current
+  // information, where fresh sources are genuinely useful.
+  const currentInfo = /\b(latest news|today's news|current price|recent updates|breaking news|weather today|release date|official website|as of today|this week)\b/i;
+  if (currentInfo.test(text)) return text;
 
   return null;
 }
