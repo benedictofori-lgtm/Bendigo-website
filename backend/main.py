@@ -506,20 +506,16 @@ def make_reply(message: str) -> str:
             "error you see. For example: Write a Python calculator using two numbers."
         )
 
-    if compact.endswith("?"):
-        search_reply = web_search_fallback(text)
-        if search_reply:
-            return search_reply
-        return (
-            "I don't have a full language model connected yet, and web search is temporarily unavailable. "
-            "I can currently explain several beginner programming topics and help debug code. Please try again "
-            "later or connect a reachable language-model service for broader answers."
-        )
+    # For general non-coding requests, attempt web search even when the user
+    # writes a prompt without a trailing question mark (for example, "Tell me about Japan").
+    search_reply = web_search_fallback(text)
+    if search_reply:
+        return search_reply
 
     return (
-        "I received your message. I can currently help with a few common programming explanations and debugging guidance, "
-        "but a full language model is not connected, so my answers to other topics are limited. Try asking about a Python "
-        "variable, loop, function, list, HTML, CSS, or JavaScript, or share a coding error."
+        "I couldn't retrieve web results for that request, and a full language model is not connected yet. "
+        "I can still explain common beginner programming topics and help debug code. Please try a more specific "
+        "search phrase or connect a reachable language-model service for broader AI-generated answers."
     )
 
 
