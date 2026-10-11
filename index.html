@@ -114,7 +114,7 @@
 <div class="editor-box"><label for="htmlCode">HTML</label><textarea id="htmlCode" spellcheck="false" placeholder="Write your HTML here..."></textarea></div>
 <div class="editor-box"><label for="cssCode">CSS</label><textarea id="cssCode" spellcheck="false" placeholder="Write your CSS here..."></textarea></div>
 <div class="editor-box"><label for="jsCode">JavaScript</label><textarea id="jsCode" spellcheck="false" placeholder="Write your JavaScript here..."></textarea></div>
-<div class="editor-box"><label for="pythonCode">Python</label><textarea id="pythonCode" spellcheck="false" placeholder="Write your Python here..."></textarea><small class="editor-note">Python editor • saved with your workspace. Execution stays off until a secure Python runtime is connected.</small></div>
+<div class="editor-box python-editor-box"><label for="pythonCode">Python</label><textarea id="pythonCode" spellcheck="false" placeholder="Write Python here..."></textarea><div class="python-run-row"><button id="runPythonButton" type="button">▶ Run Python</button><span id="pythonRunStatus" role="status">Restricted learning runner</span></div><pre id="pythonOutput" class="python-output" aria-live="polite">Your Python output will appear here.</pre><small class="editor-note">Runs common beginner Python safely. Imports, file access, network access, and advanced Python features are disabled.</small></div>
 </div>
 <div class="preview-title">Live Preview</div><iframe id="codePreview" title="Code preview" sandbox="allow-scripts"></iframe>
 </section>
