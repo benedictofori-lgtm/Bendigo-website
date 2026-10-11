@@ -265,7 +265,7 @@ async function sendMessage(message = input?.value.trim()) {
 
     await requestChatReply(message, history);
   } catch (error) {
-    addMessage("⚠️ " + error.message + " Check your Bendigo AI backend connection and try again.", "ai");
+    addMessage("⚠️ " + (error?.message || "An unexpected error occurred.") + (localAIEngine ? " The on-device model encountered a problem. Try reloading the page and enabling it again." : " Check your Bendigo AI backend connection and try again."), "ai");
   } finally {
     setThinking(false);
     input.focus();
