@@ -23,6 +23,7 @@ const runCodeButton = $("runCodeButton");
 const htmlCode = $("htmlCode");
 const cssCode = $("cssCode");
 const jsCode = $("jsCode");
+const pythonCode = $("pythonCode");
 const codePreview = $("codePreview");
 
 let sessionId = localStorage.getItem("bendigoSessionId");
@@ -678,6 +679,43 @@ $("projectNotes")?.addEventListener("input", () => {
     if (editor !== $("pythonCode")) runCode();
   }, 500);
 }));
+
+// Run beginner Python through Bendigo's restricted server-side interpreter.
+const runPythonButton = $("runPythonButton");
+runPythonButton?.addEventListener("click", async () => {
+  const output = $("pythonOutput");
+  const status = $("pythonRunStatus");
+  const source = pythonCode?.value || "";
+  if (!source.trim()) {
+    if (output) output.textContent = "Write some Python code first.";
+    if (status) status.textContent = "Waiting for code";
+    return;
+  }
+  runPythonButton.disabled = true;
+  runPythonButton.textContent = "Running…";
+  if (status) status.textContent = "Sending code to restricted runner…";
+  if (output) output.textContent = "";
+  try {
+    const response = await fetch(apiUrl("/api/python/run"), {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({code: source})
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || data.error || "Python runner request failed.");
+    if (output) output.textContent = data.output || (data.success ? "Finished with no output." : "The code could not be run.");
+    if (status) status.textContent = data.success ? "Finished • " + (data.steps || 0) + " steps" : "Check your code";
+    const codeStatus = $("codeStatus");
+    if (codeStatus) codeStatus.textContent = data.success ? "Python run complete" : "Python error";
+  } catch (error) {
+    if (output) output.textContent = "Could not reach the Python runner. Check that the backend deployment is live, then try again.";
+    if (status) status.textContent = "Runner unavailable";
+    console.error("Bendigo Python runner:", error);
+  } finally {
+    runPythonButton.disabled = false;
+    runPythonButton.textContent = "▶ Run Python";
+  }
+});
 
 let recognition = null;
 if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
