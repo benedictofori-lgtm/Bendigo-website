@@ -351,6 +351,69 @@ def clean_html(value: str) -> str:
     return re.sub(r"\s+", " ", unescape(value)).strip()
 
 
+def web_search_fallback(query: str) -> str | None:
+    """Return a few source-linked web results when no language model is available."""
+    params = urlencode({"q": query, "kl": "gh-en", "kp": "1"})
+    request = Request(
+        "https://html.duckduckgo.com/html/?" + params,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; BendigoAI/1.0)",
+            "Accept": "text/html,application/xhtml+xml",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=8) as response:
+            html = response.read(1_000_000).decode("utf-8", errors="ignore")
+        results = []
+        for match in re.finditer(r"<a\\b([^>]*)>(.*?)</a\\s*>", html, re.IGNORECASE | re.DOTALL):
+            attrs, inner = match.group(1), match.group(2)
+            class_match = re.search(r"""\\bclass\\s*=\\s*["']([^"']*)["']""", attrs, re.IGNORECASE)
+            if not class_match or "result__a" not in class_match.group(1).split():
+                continue
+            href_match = re.search(r"""\\bhref\\s*=\\s*["']([^"']+)["']""", attrs, re.IGNORECASE)
+            if not href_match:
+                continue
+            result_url = unescape(href_match.group(1)).strip()
+            if result_url.startswith("//"):
+                result_url = "https:" + result_url
+            parsed = urlparse(result_url)
+            if parsed.netloc.lower().endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
+                result_url = parse_qs(parsed.query).get("uddg", [""])[0]
+                parsed = urlparse(result_url)
+            title = clean_html(inner)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or not title:
+                continue
+            following_html = html[match.end():match.end() + 2500]
+            snippet_match = re.search(
+                r"""class\\s*=\\s*["'][^"']*\\bresult__snippet\\b[^"']*["'][^>]*>(.*?)</(?:a|div|td)\\s*>""",
+                following_html,
+                re.IGNORECASE | re.DOTALL,
+            )
+            snippet = clean_html(snippet_match.group(1))[:450] if snippet_match else ""
+            if not any(item["url"] == result_url for item in results):
+                results.append({"title": title[:220], "url": result_url, "snippet": snippet})
+            if len(results) >= 3:
+                break
+        if not results:
+            return None
+        lines = [
+            "I don't have a connected language model available right now, so these are web search results rather than an AI-generated summary.",
+            "",
+            f"Search results for: {query}",
+            "",
+        ]
+        for index, item in enumerate(results, start=1):
+            lines.append(f"{index}. {item['title']}")
+            if item["snippet"]:
+                lines.append(item["snippet"])
+            lines.append(f"Source: {item['url']}")
+            lines.append("")
+        return "\\n".join(lines).strip()
+    except Exception:
+        return None
+
+
 def make_reply(message: str) -> str:
     """Provide useful, honest built-in help when no language model is connected."""
     text = message.strip()
@@ -444,10 +507,13 @@ def make_reply(message: str) -> str:
         )
 
     if compact.endswith("?"):
+        search_reply = web_search_fallback(text)
+        if search_reply:
+            return search_reply
         return (
-            "I don't have a full language model connected yet, so I can't reliably answer every general question. "
-            "I can currently explain several beginner programming topics and help debug code. For a more complete answer, "
-            "Bendigo AI needs a reachable language-model service; this basic fallback is not the same as one."
+            "I don't have a full language model connected yet, and web search is temporarily unavailable. "
+            "I can currently explain several beginner programming topics and help debug code. Please try again "
+            "later or connect a reachable language-model service for broader answers."
         )
 
     return (
