@@ -967,3 +967,45 @@ body::after{
 @media(prefers-reduced-motion:reduce){
   body::before,body::after{animation:none!important}
 }
+
+
+/* Python Code Lab execution panel */
+.python-editor-box .python-run-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+.python-run-row button {
+  border: 1px solid rgba(120, 170, 255, .45);
+  border-radius: 9px;
+  padding: 9px 13px;
+  color: #fff;
+  background: linear-gradient(135deg, #315be8, #7138bd);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.python-run-row button:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+#pythonRunStatus {
+  color: var(--muted, #aab4ce);
+  font-size: .78rem;
+}
+.python-output {
+  box-sizing: border-box;
+  min-height: 76px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border: 1px solid rgba(160, 180, 220, .22);
+  border-radius: 10px;
+  background: rgba(5, 9, 22, .78);
+  color: #dce8ff;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
