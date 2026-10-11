@@ -46,10 +46,16 @@ function setThinking(value) {
   if (sendButton) sendButton.disabled = value;
 }
 
-async function performWebSearch(query) {
+async function performWebSearch(query, options = {}) {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(options.limit || 10),
+    region: options.region || "wt-wt",
+    safe_search: options.safeSearch || "moderate"
+  });
   let response;
   try {
-    response = await fetch(apiUrl("/api/search?q=" + encodeURIComponent(query)));
+    response = await fetch(apiUrl("/api/search?" + params.toString()), {cache: "no-store"});
   } catch {
     throw new Error("Could not connect to Bendigo AI search. Check your connection and try again.");
   }
@@ -61,9 +67,15 @@ async function performWebSearch(query) {
     return {
       text: data.notice || "No usable search results found for: " + query,
       results: [],
+      provider: data.provider || "Web search"
     };
   }
-  return {text: "Search results for: " + query, results: data.results};
+  return {
+    text: "Search results for: " + query,
+    results: data.results,
+    provider: data.provider || "Web search",
+    resultCount: data.resultCount || data.results.length
+  };
 }
 
 function addSearchResults(query, results) {
@@ -77,7 +89,14 @@ function addSearchResults(query, results) {
   results.forEach((result, index) => {
     const card = document.createElement("a");
     card.className = "search-result-card";
-    card.href = result.url;
+    let safeUrl;
+    try {
+      safeUrl = new URL(result.url);
+      if (!["http:", "https:"].includes(safeUrl.protocol)) return;
+    } catch {
+      return;
+    }
+    card.href = safeUrl.href;
     card.target = "_blank";
     card.rel = "noopener noreferrer";
 
@@ -92,7 +111,7 @@ function addSearchResults(query, results) {
     title.textContent = result.title || result.url;
 
     const url = document.createElement("small");
-    url.textContent = result.url;
+    url.textContent = result.domain || safeUrl.hostname.replace(/^www\./, "");
 
     const snippet = document.createElement("p");
     snippet.textContent = result.snippet || "Open this result to view the source.";
