@@ -191,6 +191,30 @@ async function requestChatReply(message, history) {
   if (data.notice) addMessage(data.notice, "notice");
 }
 
+function getWebSearchQuery(message) {
+  const text = String(message || "").trim();
+  if (!text) return null;
+
+  // Explicit search commands always use the web-search endpoint.
+  const explicit = text.match(/^\s*(?:search(?: the web)?(?: for)?|look up|find (?:web )?results for)\s+(.+)/i);
+  if (explicit) return explicit[1].trim();
+
+  // Without a language model, factual/current questions should search the web
+  // rather than return a misleading canned chat answer.
+  const factualQuestion = /^(?:what is|what are|who is|who are|who was|where is|where are|when is|when did|why is|why are|why does|how does|how do|how to|what happened to|tell me about|latest|current|recent|news about|price of|meaning of)\b/i;
+  const currentInfo = /\b(latest news|today's news|current price|recent updates|breaking news|weather today|release date|official website)\b/i;
+  if (factualQuestion.test(text) || currentInfo.test(text)) return text;
+
+  return null;
+}
+
+async function runWebSearchInChat(query) {
+  if (!query) return;
+  const searchData = await performWebSearch(query);
+  if (searchData.results.length) addSearchResults(query, searchData.results, searchData);
+  else addMessage(searchData.text, "ai");
+}
+
 async function sendMessage(message = input?.value.trim()) {
   if (!message || !input || !chat) return;
   input.value = "";
@@ -198,12 +222,9 @@ async function sendMessage(message = input?.value.trim()) {
   setThinking(true);
 
   try {
-    const searchMatch = message.match(/^\s*(?:search(?: the web)?(?: for)?|look up)\s+(.+)/i);
-    if (searchMatch) {
-      const query = searchMatch[1].trim();
-      const searchData = await performWebSearch(query);
-      if (searchData.results.length) addSearchResults(query, searchData.results, searchData);
-      else addMessage(searchData.text, "ai");
+    const searchQuery = getWebSearchQuery(message);
+    if (searchQuery) {
+      await runWebSearchInChat(searchQuery);
       return;
     }
 
@@ -1103,6 +1124,24 @@ sidebarSearchInput?.addEventListener("input",()=>{
     const label=item.textContent.trim().toLowerCase();
     item.hidden=!!query&&!label.includes(query);
   });
+});
+sidebarSearchInput?.addEventListener("keydown",async event=>{
+  if(event.key!=="Enter")return;
+  const query=sidebarSearchInput.value.trim();
+  if(!query)return;
+  event.preventDefault();
+  if(sidebarSearch)sidebarSearch.hidden=true;
+  sidebarSearchInput.value="";
+  document.querySelectorAll(".chatgpt-nav .side-link,.pinned-link,.recent-link").forEach(item=>item.hidden=false);
+  addMessage("Search the web for: "+query,"user");
+  setThinking(true);
+  try {
+    await runWebSearchInChat(query);
+  } catch(error) {
+    addMessage("Web search failed: "+error.message,"ai");
+  } finally {
+    setThinking(false);
+  }
 });
 sidebarCollapseButton?.addEventListener("click",()=>{
   document.body.classList.toggle("sidebar-collapsed");
