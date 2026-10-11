@@ -366,12 +366,12 @@ def web_search_fallback(query: str) -> str | None:
         with urlopen(request, timeout=8) as response:
             html = response.read(1_000_000).decode("utf-8", errors="ignore")
         results = []
-        for match in re.finditer(r"<a\\b([^>]*)>(.*?)</a\\s*>", html, re.IGNORECASE | re.DOTALL):
+        for match in re.finditer(r"<a\b([^>]*)>(.*?)</a\s*>", html, re.IGNORECASE | re.DOTALL):
             attrs, inner = match.group(1), match.group(2)
-            class_match = re.search(r"""\\bclass\\s*=\\s*["']([^"']*)["']""", attrs, re.IGNORECASE)
+            class_match = re.search(r"""\bclass\s*=\s*["']([^"']*)["']""", attrs, re.IGNORECASE)
             if not class_match or "result__a" not in class_match.group(1).split():
                 continue
-            href_match = re.search(r"""\\bhref\\s*=\\s*["']([^"']+)["']""", attrs, re.IGNORECASE)
+            href_match = re.search(r"""\bhref\s*=\s*["']([^"']+)["']""", attrs, re.IGNORECASE)
             if not href_match:
                 continue
             result_url = unescape(href_match.group(1)).strip()
@@ -386,7 +386,7 @@ def web_search_fallback(query: str) -> str | None:
                 continue
             following_html = html[match.end():match.end() + 2500]
             snippet_match = re.search(
-                r"""class\\s*=\\s*["'][^"']*\\bresult__snippet\\b[^"']*["'][^>]*>(.*?)</(?:a|div|td)\\s*>""",
+                r"""class\s*=\s*["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>(.*?)</(?:a|div|td)\s*>""",
                 following_html,
                 re.IGNORECASE | re.DOTALL,
             )
@@ -409,7 +409,7 @@ def web_search_fallback(query: str) -> str | None:
                 lines.append(item["snippet"])
             lines.append(f"Source: {item['url']}")
             lines.append("")
-        return "\\n".join(lines).strip()
+        return "\n".join(lines).strip()
     except Exception:
         return None
 
