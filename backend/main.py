@@ -1046,67 +1046,98 @@ async def github_files():
 
 
 @app.get("/api/search")
-async def search(q: str = Query(min_length=1, max_length=500)):
-    query = q.strip()
+async def search(
+    q: str = Query(min_length=1, max_length=500),
+    limit: int = Query(default=10, ge=1, le=15),
+    region: str = Query(default="wt-wt", pattern=r"^[a-zA-Z-]{2,12}$"),
+    safe_search: str = Query(default="moderate", pattern=r"^(strict|moderate|off)$"),
+):
+    """Search the public web through DuckDuckGo HTML results (no API key required)."""
+    query = re.sub(r"\s+", " ", q).strip()
     if not query:
         raise HTTPException(status_code=422, detail="Search query cannot be blank.")
 
-    url = "https://html.duckduckgo.com/html/?q=" + quote(query)
+    # DuckDuckGo's HTML endpoint accepts region and Safe Search settings.
+    safe_codes = {"strict": "1", "moderate": "-1", "off": "-2"}
+    params = urlencode({"q": query, "kl": region, "kp": safe_codes[safe_search]})
+    url = "https://html.duckduckgo.com/html/?" + params
     request = Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Bendigo AI)",
-        "Accept": "text/html",
+        "User-Agent": "Mozilla/5.0 (compatible; BendigoAI/1.0; +https://github.com/benedictofori-lgtm/Bendigo-website)",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.8",
     })
 
     try:
-        with urlopen(request, timeout=12) as response:
+        with urlopen(request, timeout=10) as response:
             status = getattr(response, "status", 200)
             if status < 200 or status >= 300:
-                raise RuntimeError("Unsuccessful search-provider response.")
-            html = response.read().decode("utf-8", errors="ignore")
+                raise RuntimeError("Search provider returned an unsuccessful response.")
+            html = response.read(1_500_001).decode("utf-8", errors="ignore")
 
         if not html.strip():
-            raise RuntimeError("Empty search-provider response.")
+            raise RuntimeError("Search provider returned an empty response.")
 
         results = []
-        pattern = re.compile(
-            r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
-            re.IGNORECASE | re.DOTALL,
-        )
-        for match in pattern.finditer(html):
-            result_url = unescape(match.group(1)).strip()
-            title = clean_html(match.group(2))
+        # Parse anchors independent of the order of HTML attributes.
+        for match in re.finditer(r"<a\b([^>]*)>(.*?)</a\s*>", html, re.IGNORECASE | re.DOTALL):
+            attrs, inner = match.group(1), match.group(2)
+            class_match = re.search(r"""\bclass\s*=\s*["']([^"']*)["']""", attrs, re.IGNORECASE)
+            if not class_match or "result__a" not in class_match.group(1).split():
+                continue
+            href_match = re.search(r"""\bhref\s*=\s*["']([^"']+)["']""", attrs, re.IGNORECASE)
+            if not href_match:
+                continue
+            result_url = unescape(href_match.group(1)).strip()
+            title = clean_html(inner)
             if result_url.startswith("//"):
                 result_url = "https:" + result_url
             parsed_url = urlparse(result_url)
-            if parsed_url.path.startswith("/l/") and parsed_url.netloc.endswith("duckduckgo.com"):
+            if parsed_url.netloc.lower().endswith("duckduckgo.com") and parsed_url.path.startswith("/l/"):
                 destination = parse_qs(parsed_url.query).get("uddg", [""])[0]
                 result_url = unquote(destination) if destination else ""
                 parsed_url = urlparse(result_url)
             if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc or not title:
                 continue
+            if parsed_url.username or parsed_url.password:
+                continue
 
+            following_html = html[match.end():match.end() + 2500]
             snippet_match = re.search(
-                r'class="result__snippet"[^>]*>(.*?)</(?:a|div)',
-                html[match.end():match.end() + 5000],
+                r"""class\s*=\s*["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>(.*?)</(?:a|div|td)\s*>""",
+                following_html,
                 re.IGNORECASE | re.DOTALL,
             )
-            snippet = clean_html(snippet_match.group(1)) if snippet_match else ""
-            results.append({"title": title, "url": result_url, "snippet": snippet})
-            if len(results) >= 8:
+            snippet = clean_html(snippet_match.group(1))[:700] if snippet_match else ""
+            host = parsed_url.netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+            item = {"title": title[:300], "url": result_url, "snippet": snippet, "domain": host}
+            if not any(existing["url"] == result_url for existing in results):
+                results.append(item)
+            if len(results) >= limit:
                 break
 
         return {
             "success": True,
             "query": query,
             "results": results,
-            "notice": None if results else "No usable search results were found. Try different keywords.",
+            "resultCount": len(results),
+            "limit": limit,
+            "region": region,
+            "safeSearch": safe_search,
+            "provider": "DuckDuckGo",
+            "notice": None if results else "No usable search results were found. Try different keywords or change the Safe Search setting.",
             "timestamp": now_iso(),
         }
+    except HTTPException:
+        raise
     except Exception:
         return {
             "success": False,
             "query": query,
             "results": [],
-            "error": "Web search is temporarily unavailable. Please try again.",
+            "resultCount": 0,
+            "error": "Web search is temporarily unavailable. Please try again in a moment.",
+            "provider": "DuckDuckGo",
             "timestamp": now_iso(),
         }
