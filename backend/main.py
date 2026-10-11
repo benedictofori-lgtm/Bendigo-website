@@ -3,6 +3,8 @@ from html import escape, unescape
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 import json
+import ast
+import operator
 import logging
 import os
 import re
@@ -275,6 +277,10 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
     sessionId: str | None = Field(default=None, max_length=120)
     history: list[dict[str, Any]] = Field(default_factory=list, max_length=40)
+
+
+class PythonRunRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=6000)
 
 
 class CodeRequest(BaseModel):
@@ -712,6 +718,170 @@ async def get_chat_history(sessionId: str = Query(default="default", max_length=
 async def delete_chat_history(sessionId: str = Query(default="default", max_length=120)):
     db_delete_history(sessionId)
     return {"success": True, "sessionId": sessionId}
+
+
+# This is a deliberately restricted interpreter, not unrestricted Python exec.
+# It supports beginner snippets while preventing file, network, process, and import access.
+_SAFE_BINOPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod, ast.Pow: operator.pow,
+}
+_SAFE_UNARYOPS = {ast.UAdd: operator.pos, ast.USub: operator.neg, ast.Not: operator.not_}
+_SAFE_COMPARE = {
+    ast.Eq: operator.eq, ast.NotEq: operator.ne, ast.Lt: operator.lt,
+    ast.LtE: operator.le, ast.Gt: operator.gt, ast.GtE: operator.ge,
+}
+
+
+class SafePythonRunner:
+    def __init__(self):
+        self.variables = {}
+        self.output = []
+        self.steps = 0
+
+    def tick(self):
+        self.steps += 1
+        if self.steps > 1000:
+            raise ValueError("Execution limit reached (1,000 steps). Simplify the program.")
+
+    def expr(self, node):
+        self.tick()
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (str, int, float, bool, type(None))):
+                return node.value
+            raise ValueError("This value type is not supported.")
+        if isinstance(node, ast.Name):
+            if node.id in self.variables:
+                return self.variables[node.id]
+            raise ValueError("Name '" + node.id + "' is not defined.")
+        if isinstance(node, ast.List):
+            return [self.expr(item) for item in node.elts]
+        if isinstance(node, ast.Tuple):
+            return tuple(self.expr(item) for item in node.elts)
+        if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_BINOPS:
+            left, right = self.expr(node.left), self.expr(node.right)
+            if isinstance(node.op, ast.Pow) and (abs(float(right)) > 8 or (isinstance(left, (int, float)) and abs(float(left)) > 1e6)):
+                raise ValueError("Exponent is too large for this learning runner.")
+            value = _SAFE_BINOPS[type(node.op)](left, right)
+            if isinstance(value, (int, float)) and abs(value) > 1e100:
+                raise ValueError("Result is too large.")
+            return value
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_UNARYOPS:
+            return _SAFE_UNARYOPS[type(node.op)](self.expr(node.operand))
+        if isinstance(node, ast.BoolOp):
+            values = [self.expr(item) for item in node.values]
+            return all(values) if isinstance(node.op, ast.And) else any(values)
+        if isinstance(node, ast.Compare):
+            left = self.expr(node.left)
+            for op_node, comparator in zip(node.ops, node.comparators):
+                right = self.expr(comparator)
+                fn = _SAFE_COMPARE.get(type(op_node))
+                if not fn or not fn(left, right):
+                    return False
+                left = right
+            return True
+        if isinstance(node, ast.IfExp):
+            return self.expr(node.body if self.expr(node.test) else node.orelse)
+        if isinstance(node, ast.Subscript):
+            value, index = self.expr(node.value), self.expr(node.slice)
+            if not isinstance(value, (list, tuple, str)) or not isinstance(index, (int, slice)):
+                raise ValueError("Only list, tuple, and string indexing is supported.")
+            return value[index]
+        if isinstance(node, ast.Slice):
+            return slice(
+                self.expr(node.lower) if node.lower else None,
+                self.expr(node.upper) if node.upper else None,
+                self.expr(node.step) if node.step else None,
+            )
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            name = node.func.id
+            args = [self.expr(arg) for arg in node.args]
+            if node.keywords:
+                raise ValueError("Keyword arguments are not supported in this runner.")
+            if name == "range":
+                if not 1 <= len(args) <= 3 or not all(isinstance(x, int) for x in args):
+                    raise ValueError("range() needs one to three whole-number arguments.")
+                result = range(*args)
+                if len(result) > 200:
+                    raise ValueError("range() is limited to 200 items.")
+                return result
+            if name == "len" and len(args) == 1 and isinstance(args[0], (str, list, tuple)):
+                return len(args[0])
+            if name == "str" and len(args) == 1:
+                return str(args[0])
+            if name == "int" and len(args) == 1:
+                return int(args[0])
+            if name == "float" and len(args) == 1:
+                return float(args[0])
+            if name == "print":
+                text = " ".join(str(arg) for arg in args)
+                self.output.append(text)
+                if sum(len(line) for line in self.output) > 12000:
+                    raise ValueError("Output limit reached (12,000 characters).")
+                return None
+            raise ValueError("Only print(), range(), len(), str(), int(), and float() are available.")
+        raise ValueError("Unsupported Python expression: " + type(node).__name__ + ".")
+
+    def statement(self, node):
+        self.tick()
+        if isinstance(node, ast.Assign):
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                raise ValueError("Assign values to one variable at a time.")
+            self.variables[node.targets[0].id] = self.expr(node.value)
+        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) and type(node.op) in _SAFE_BINOPS:
+            current = self.variables.get(node.target.id)
+            if current is None and node.target.id not in self.variables:
+                raise ValueError("Name '" + node.target.id + "' is not defined.")
+            self.variables[node.target.id] = _SAFE_BINOPS[type(node.op)](current, self.expr(node.value))
+        elif isinstance(node, ast.Expr):
+            # Only print calls are allowed as standalone statements.
+            if not (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "print"):
+                raise ValueError("Only print(...) may be used as a standalone statement.")
+            self.expr(node.value)
+        elif isinstance(node, ast.If):
+            branch = node.body if self.expr(node.test) else node.orelse
+            for item in branch:
+                self.statement(item)
+        elif isinstance(node, ast.For) and isinstance(node.target, ast.Name):
+            iterable = self.expr(node.iter)
+            if not isinstance(iterable, (range, list, tuple, str)):
+                raise ValueError("for loops can iterate over range(), lists, tuples, or strings.")
+            if len(iterable) > 200:
+                raise ValueError("Loops are limited to 200 iterations.")
+            for item in iterable:
+                self.variables[node.target.id] = item
+                for child in node.body:
+                    self.statement(child)
+            if node.orelse:
+                for child in node.orelse:
+                    self.statement(child)
+        elif isinstance(node, ast.Pass):
+            return
+        else:
+            raise ValueError("Unsupported Python statement: " + type(node).__name__ + ".")
+
+    def run(self, source):
+        if not source.strip():
+            raise ValueError("Enter some Python code first.")
+        tree = ast.parse(source, mode="exec")
+        for statement in tree.body:
+            self.statement(statement)
+        return "\n".join(self.output) if self.output else "Program finished with no printed output."
+
+
+@app.post("/api/python/run")
+async def run_python(request: PythonRunRequest):
+    try:
+        runner = SafePythonRunner()
+        output = runner.run(request.code)
+        return {"success": True, "output": output, "steps": runner.steps, "runner": "restricted-learning-interpreter"}
+    except (SyntaxError, ValueError, TypeError, ArithmeticError, IndexError, KeyError) as exc:
+        if isinstance(exc, SyntaxError):
+            message = "Syntax error on line " + str(exc.lineno or "?") + ": " + (exc.msg or "invalid syntax")
+        else:
+            message = str(exc) or "The code could not be run."
+        return {"success": False, "output": message, "runner": "restricted-learning-interpreter"}
 
 
 @app.post("/api/code")
