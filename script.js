@@ -249,11 +249,17 @@ async function sendMessage(message = input?.value.trim()) {
   try {
     const searchQuery = getWebSearchQuery(message);
     if (searchQuery) {
-      await runWebSearchInChat(searchQuery);
-      return;
+      try {
+        await runWebSearchInChat(searchQuery);
+        return;
+      } catch (searchError) {
+        // Search outages should not prevent the chat from answering at all.
+        addMessage("Web search is unavailable right now, so I'll try to answer without live search. Current facts may need verification.", "notice");
+        console.warn("Bendigo web search failed; falling back to chat:", searchError);
+      }
     }
 
-    const history = [...chat.querySelectorAll(".message")].slice(-10).map(el => ({
+    const history = [...chat.querySelectorAll(".message")].slice(-12).map(el => ({
       role: el.classList.contains("user") ? "user" : "assistant",
       content: el.textContent
     }));
