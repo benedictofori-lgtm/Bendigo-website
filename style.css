@@ -313,7 +313,7 @@ header{padding:18px 32px;min-height:82px;background:rgba(4,14,31,.2);border-bott
 .workspace-tags{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .workspace-tags span{padding:9px 12px;border-radius:8px;background:rgba(16,31,53,.72);border:1px solid rgba(148,163,184,.13);font-size:11px;color:#9fafc4}
 .workspace-ai{flex:0 0 92px;height:92px;display:grid;place-items:center;border-radius:26px;background:#10182f;color:#f5f7ff;font-size:27px;font-weight:800;box-shadow:0 0 45px rgba(104,92,255,.45);border:1px solid rgba(122,100,255,.65)}
-.workspace-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.workspace-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}
 .workspace-stats>div{padding:18px 20px;border:1px solid rgba(148,163,184,.13);border-radius:14px;background:rgba(7,19,39,.62)}
 .workspace-stats small{display:block;color:#7f91aa;font-size:9px;font-weight:800;letter-spacing:1.3px}
 .workspace-stats strong{display:block;margin:7px 0 3px;color:#f4f7ff;font-size:19px}
