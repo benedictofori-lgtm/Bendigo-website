@@ -416,6 +416,62 @@ def make_reply(message: str) -> str:
     lower = text.lower()
     compact = re.sub(r"\s+", " ", lower).strip()
 
+    # Project-specific presentation answers remain available even when no model
+    # provider or web-search service is configured.
+    project_terms = (
+        "bendigo ai", "this project", "your project", "the project",
+        "who created", "who made", "who developed", "why was it created",
+        "why did you create", "purpose of", "aim of", "goal of",
+        "what problem", "how does it work", "features", "future plans",
+        "benefits", "target users", "organization presentation",
+    )
+    if any(term in compact for term in project_terms):
+        if any(term in compact for term in ("who created", "who made", "who developed", "who is the creator")):
+            return (
+                "Bendigo AI was created by Benedict Ofori. It is a project focused on building an AI-powered "
+                "workspace for learning, coding, website development, design, and turning ideas into real projects."
+            )
+        if any(term in compact for term in ("why was it created", "why did you create", "purpose of", "aim of", "goal of", "what problem")):
+            return (
+                "Bendigo AI was created to explore how artificial intelligence can help people learn, solve problems, "
+                "and turn ideas into practical projects. Its goal is to bring AI assistance and creative development "
+                "tools together in one workspace, especially for people learning programming or starting a project."
+            )
+        if any(term in compact for term in ("future plans", "future of", "next for", "improve", "still developing")):
+            return (
+                "The future plan for Bendigo AI is to improve the reliability of its AI answers, connect and verify "
+                "the language model, make web search dependable, confirm persistent database storage, and continue "
+                "developing coding and design tools. These are development goals; each feature must be tested before "
+                "it is described as fully working."
+            )
+        if any(term in compact for term in ("features", "what can it do", "what does it do", "capabilities")):
+            return (
+                "Bendigo AI is being developed as an AI-powered workspace for asking questions, learning programming, "
+                "getting coding guidance, creating website projects, and exploring design ideas. The project includes "
+                "a web interface and a backend service. The full AI-model connection, reliable web search, and persistent "
+                "database storage still need to be verified, so I do not claim every feature is fully operational yet."
+            )
+        if any(term in compact for term in ("how does it work", "technology", "backend", "how is it built")):
+            return (
+                "Bendigo AI has a browser-based workspace hosted on GitHub Pages and a Python FastAPI backend hosted "
+                "on Render. The backend provides API routes for chat and other workspace features, and the project has "
+                "a PostgreSQL database configured in Render. The database connection and a full language-model "
+                "connection still require verification."
+            )
+        if any(term in compact for term in ("benefits", "who is it for", "target users", "who can use")):
+            return (
+                "Bendigo AI is intended for learners, students, beginner programmers, developers, and creative people "
+                "who want help understanding concepts and developing websites or other projects. The intended benefit "
+                "is to make technical learning and project-building more approachable from one workspace."
+            )
+        return (
+            "Bendigo AI is an AI-powered workspace project created by Benedict Ofori. Its vision is to bring learning, "
+            "coding assistance, website development, design, and project planning together in one place so people can "
+            "turn ideas into real projects. The workspace is hosted on GitHub Pages, with a Python FastAPI backend on "
+            "Render. Some capabilities, including the full AI-model connection, web search reliability, and persistent "
+            "database storage, are still being verified and improved."
+        )
+
     if compact in {"hello", "hi", "hey", "hello bendigo ai", "good morning", "good afternoon"}:
         return "Hello! I'm Bendigo AI. I can help with beginner programming, project planning, and troubleshooting. Ask a specific question and I'll explain it step by step."
 
