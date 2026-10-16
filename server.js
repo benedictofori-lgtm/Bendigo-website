@@ -210,7 +210,16 @@ app.get("/api/search", async (req, res) => {
       const title = match[2].replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
       let link = match[1];
       if (link.startsWith("//")) link = "https:" + link;
-      if (title && link) results.push({ title, url: link });
+      // DuckDuckGo wraps many result URLs in /l/?uddg=... redirects.
+      // Return the destination URL so result cards link directly to the source.
+      try {
+        const parsedLink = new URL(link, "https://html.duckduckgo.com");
+        const destination = parsedLink.searchParams.get("uddg");
+        if (destination) link = destination;
+      } catch {
+        // Keep the original link if a provider result URL is unusual.
+      }
+      if (title && /^https?:\/\//i.test(link)) results.push({ title, url: link });
     }
     res.json({ query, results });
   } catch (error) {
