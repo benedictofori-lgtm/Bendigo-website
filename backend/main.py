@@ -1202,6 +1202,7 @@ async def search(
     # Direct unit tests call this endpoint function without FastAPI resolving Query defaults.
     safe_value = safe_search if isinstance(safe_search, str) else "strict"
     region_value = region if isinstance(region, str) else "gh-en"
+    limit_value = limit if isinstance(limit, int) and not isinstance(limit, bool) else 10
     params = urlencode({"q": query, "kl": region_value, "kp": safe_codes.get(safe_value, "1")})
     url = "https://html.duckduckgo.com/html/?" + params
     request = Request(url, headers={
@@ -1257,7 +1258,7 @@ async def search(
             item = {"title": title[:300], "url": result_url, "snippet": snippet, "domain": host}
             if not any(existing["url"] == result_url for existing in results):
                 results.append(item)
-            if len(results) >= limit:
+            if len(results) >= limit_value:
                 break
 
         return {
@@ -1265,9 +1266,9 @@ async def search(
             "query": query,
             "results": results,
             "resultCount": len(results),
-            "limit": limit,
-            "region": region,
-            "safeSearch": safe_search,
+            "limit": limit_value,
+            "region": region_value,
+            "safeSearch": safe_value,
             "provider": "DuckDuckGo",
             "notice": None if results else "No usable search results were found. Try different keywords or change the Safe Search setting.",
             "timestamp": now_iso(),
