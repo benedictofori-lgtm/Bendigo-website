@@ -78,14 +78,18 @@ def init_database() -> None:
 def db_get_history(session_id: str, limit: int = 40) -> list[dict[str, str]]:
     if not DATABASE_URL:
         return chat_history.get(session_id, [])
-    with db_connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT role, content FROM chat_messages WHERE session_id = %s ORDER BY created_at DESC, id DESC LIMIT %s",
-                (session_id, limit),
-            )
-            rows = list(reversed(cur.fetchall()))
-    return [{"role": role, "content": content} for role, content in rows]
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT role, content FROM chat_messages WHERE session_id = %s ORDER BY created_at DESC, id DESC LIMIT %s",
+                    (session_id, limit),
+                )
+                rows = list(reversed(cur.fetchall()))
+        return [{"role": role, "content": content} for role, content in rows]
+    except psycopg.Error:
+        logger.exception("Chat history read failed; using temporary in-memory history.")
+        return chat_history.get(session_id, [])
 
 
 def db_add_messages(session_id: str, messages: list[dict[str, str]]) -> None:
@@ -94,23 +98,31 @@ def db_add_messages(session_id: str, messages: list[dict[str, str]]) -> None:
     if not DATABASE_URL:
         chat_history[session_id] = (chat_history.get(session_id, []) + messages)[-40:]
         return
-    with db_connect() as conn:
-        with conn.cursor() as cur:
-            cur.executemany(
-                "INSERT INTO chat_messages (session_id, role, content) VALUES (%s, %s, %s)",
-                [(session_id, item["role"], item["content"]) for item in messages],
-            )
-        conn.commit()
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO chat_messages (session_id, role, content) VALUES (%s, %s, %s)",
+                    [(session_id, item["role"], item["content"]) for item in messages],
+                )
+            conn.commit()
+    except psycopg.Error:
+        logger.exception("Chat history write failed; messages are available only in temporary memory.")
+        chat_history[session_id] = (chat_history.get(session_id, []) + messages)[-40:]
 
 
 def db_delete_history(session_id: str) -> None:
     if not DATABASE_URL:
         chat_history.pop(session_id, None)
         return
-    with db_connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM chat_messages WHERE session_id = %s", (session_id,))
-        conn.commit()
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM chat_messages WHERE session_id = %s", (session_id,))
+            conn.commit()
+    except psycopg.Error:
+        logger.exception("Chat history delete failed; clearing temporary in-memory history.")
+        chat_history.pop(session_id, None)
 
 
 @app.on_event("startup")
