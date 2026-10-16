@@ -1199,7 +1199,10 @@ async def search(
 
     # DuckDuckGo's HTML endpoint accepts region and Safe Search settings.
     safe_codes = {"strict": "1", "moderate": "-1", "off": "-2"}
-    params = urlencode({"q": query, "kl": region, "kp": safe_codes[safe_search]})
+    # Direct unit tests call this endpoint function without FastAPI resolving Query defaults.
+    safe_value = safe_search if isinstance(safe_search, str) else "strict"
+    region_value = region if isinstance(region, str) else "gh-en"
+    params = urlencode({"q": query, "kl": region_value, "kp": safe_codes.get(safe_value, "1")})
     url = "https://html.duckduckgo.com/html/?" + params
     request = Request(url, headers={
         "User-Agent": "Mozilla/5.0 (compatible; BendigoAI/1.0; +https://github.com/benedictofori-lgtm/Bendigo-website)",
