@@ -204,7 +204,7 @@ app.get("/api/search", async (req, res) => {
     if (!response.ok) throw new Error("Search provider returned " + response.status);
     const html = await response.text();
     const results = [];
-    const pattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\\s\\S]*?)<\\/a>/gi;
+    const pattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let match;
     while ((match = pattern.exec(html)) && results.length < 8) {
       const title = match[2].replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
