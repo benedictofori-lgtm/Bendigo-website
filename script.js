@@ -258,10 +258,15 @@ async function sendMessage(message = input?.value.trim()) {
       }
     }
 
-    const history = [...chat.querySelectorAll(".message")].slice(-12).map(el => ({
-      role: el.classList.contains("user") ? "user" : "assistant",
-      content: el.textContent
-    }));
+    // Only send actual user/assistant turns to the model. Notices and web-search
+    // cards are UI elements, not conversation turns, and can confuse follow-up answers.
+    const history = [...chat.querySelectorAll(".message.user, .message.ai")]
+      .slice(-12)
+      .map(el => ({
+        role: el.classList.contains("user") ? "user" : "assistant",
+        content: el.textContent.trim()
+      }))
+      .filter(item => item.content);
 
     await requestChatReply(message, history);
   } catch (error) {
