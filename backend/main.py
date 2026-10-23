@@ -674,11 +674,28 @@ async def db_status():
     try:
         with db_connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT 1")
+                # Check the table used by chat-history persistence, not just
+                # whether PostgreSQL accepts a generic SELECT 1 query.
+                cur.execute("SELECT 1 FROM chat_messages LIMIT 1")
                 cur.fetchone()
-        return {"configured": True, "type": "postgresql", "persistent": True, "status": "connected"}
-    except Exception as exc:
-        return {"configured": True, "type": "postgresql", "persistent": False, "status": "error", "error": str(exc)[:200]}
+        return {
+            "configured": True,
+            "type": "postgresql",
+            "persistent": True,
+            "status": "connected",
+            "chatHistoryTable": "available",
+        }
+    except Exception:
+        # Do not expose database hostnames, credentials, or raw driver errors
+        # through this public endpoint. The full details remain in server logs.
+        logger.exception("Database health check failed.")
+        return {
+            "configured": True,
+            "type": "postgresql",
+            "persistent": False,
+            "status": "error",
+            "error": "Database connection or chat-history table is unavailable.",
+        }
 
 
 @app.get("/api/ai/status")
