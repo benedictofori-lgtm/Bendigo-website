@@ -281,11 +281,28 @@ async function verifyBendigoBackend() {
   const ready = document.querySelector(".header-ready");
   const dot = ready?.querySelector("span");
   try {
-    const response = await fetch(apiUrl("/api/health"), {cache: "no-store"});
-    const data = await response.json();
-    if (!response.ok || data.status !== "healthy") throw new Error("Backend health check failed.");
-    if (ready) ready.lastChild.textContent = data.aiConfigured ? " AI workspace ready" : " Backend online";
-    if (dot) dot.setAttribute("title", data.aiConfigured ? "AI service connected" : "Backend online; model service not configured");
+    const [healthResponse, aiResponse] = await Promise.all([
+      fetch(apiUrl("/api/health"), {cache: "no-store"}),
+      fetch(apiUrl("/api/ai/status"), {cache: "no-store"})
+    ]);
+    const health = await healthResponse.json();
+    const ai = aiResponse.ok ? await aiResponse.json() : null;
+    if (!healthResponse.ok || health.status !== "healthy") throw new Error("Backend health check failed.");
+
+    let label = " Backend online · AI needs setup";
+    let title = "Backend is healthy, but no language model is configured.";
+    if (ai?.configured && ai.connectionStatus === "ready") {
+      label = " Backend online · Model endpoint ready";
+      title = "Model endpoint is reachable; a successful chat generation should still be tested.";
+    } else if (ai?.configured && ai.connectionStatus === "configured_not_verified") {
+      label = " Backend online · Model needs testing";
+      title = "Model settings exist, but successful generation has not been verified.";
+    } else if (ai?.configured) {
+      label = " Backend online · Model unavailable";
+      title = "Model endpoint is unavailable or the selected model is missing.";
+    }
+    if (ready) ready.lastChild.textContent = label;
+    if (dot) dot.setAttribute("title", title);
   } catch (error) {
     if (ready) ready.lastChild.textContent = " Backend offline";
     if (dot) dot.setAttribute("title", "Bendigo backend is not reachable");
