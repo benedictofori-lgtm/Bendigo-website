@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import uuid
 from html import escape, unescape
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -760,7 +761,7 @@ async def status():
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     message = request.message.strip()
-    session_id = (request.sessionId or "default").strip()[:120] or "default"
+    session_id = (request.sessionId or uuid.uuid4().hex).strip()[:120]
 
     messages = db_get_history(session_id)
     model_reply = None
@@ -769,7 +770,9 @@ async def chat(request: ChatRequest):
         try:
             model_reply = ai_model_reply(message, request.history or messages[:-1])
         except Exception:
-            # Keep internal endpoint details out of the public response.
+            # Keep credentials and provider response details out of the public response,
+            # but log the traceback so deployment issues can be diagnosed.
+            logger.exception("AI model request failed.")
             model_error = True
 
     reply = model_reply or make_reply(message)
@@ -801,7 +804,7 @@ async def chat(request: ChatRequest):
 @app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest):
     message = request.message.strip()
-    session_id = (request.sessionId or "default").strip()[:120] or "default"
+    session_id = (request.sessionId or uuid.uuid4().hex).strip()[:120]
 
     async def events():
         messages = db_get_history(session_id)
@@ -816,6 +819,7 @@ async def chat_stream(request: ChatRequest):
             try:
                 reply = ai_model_reply(message, request.history or messages[:-1])
             except Exception:
+                logger.exception("Streaming AI model request failed.")
                 model_error = True
 
         model_used = bool(reply)
