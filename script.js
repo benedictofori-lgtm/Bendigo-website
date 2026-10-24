@@ -192,10 +192,9 @@ async function requestChatReply(message, history) {
       }
 
       if (completion?.notice) {
-        const notice = document.createElement("small");
-        notice.className = "message-notice";
-        notice.textContent = completion.notice;
-        aiMessage.appendChild(notice);
+        // Keep model/fallback status separate from the answer so users can
+        // clearly tell when the backend returned a basic fallback response.
+        addMessage(completion.notice, "notice");
       }
       if (aiMessage.textContent.trim()) return;
       aiMessage.remove();
