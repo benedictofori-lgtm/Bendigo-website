@@ -34,10 +34,22 @@ jobs:
           test -f style.css
           test -f script.js
           echo "Bendigo AI frontend files are present."
-      - name: Upload website artifact
+      - name: Prepare Bendigo AI website only
+        run: |
+          mkdir -p site
+          cp index.html style.css script.js site/
+          if [ -d assets ]; then cp -R assets site/assets; fi
+          for file in *.svg *.png *.jpg *.jpeg *.webp *.ico; do
+            [ -f "$file" ] && cp "$file" site/ || true
+          done
+          test -f site/index.html
+          test -f site/style.css
+          test -f site/script.js
+          test ! -d site/Alien-Forest-Adventure
+      - name: Upload Bendigo AI website artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: site
   deploy:
     environment:
       name: github-pages
