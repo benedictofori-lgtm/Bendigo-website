@@ -1,5 +1,5 @@
-# Alien Forest Adventure
-A browser-playable real-time 3D third-person sci-fi adventure built with Three.js.
+# Bendigo Forest Adventure
+Bendigo Forest Adventure is a browser-playable, real-time 3D third-person sci-fi adventure built with Three.js.
 
 ## Play online
 The game is intended to be hosted as a Render Static Site from this directory.
@@ -13,7 +13,7 @@ The game is intended to be hosted as a Render Static Site from this directory.
 - R: restart
 
 ## Mission
-Collect five glowing crystals, avoid the alien sentinels, and reach the portal.
+Collect five glowing crystals, avoid the hostile sentinels, and reach the portal.
 
 ## Tech
 - Three.js 0.164.1 via CDN
